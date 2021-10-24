@@ -5,7 +5,7 @@ CXXFLAGS += -O0 -m64 -march=native -g -Wall -Wextra -Wpedantic -std=c++17 -fPIC
 else
 TARGET = libxoshiro128.a
 OBJECT = xoshiro128.o
-CXXFLAGS += -Ofast -m64 -march=native -s -DNDEBUG -Wall -Wextra -Wpedantic -std=c++17 -flto -fPIC -funroll-loops
+CXXFLAGS += -Ofast -m64 -march=native -s -DNDEBUG -Wall -Wextra -Wpedantic -std=c++17 -flto -fPIC -funroll-loops -fdisable-tree-cunrolli
 endif
 
 all: $(TARGET)
