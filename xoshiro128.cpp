@@ -1,5 +1,16 @@
 #include "xoshiro128.h"
-#include <cassert>
+
+namespace {
+struct SplitMix64 {
+  explicit SplitMix64(uint64_t seed) : state(seed) {}
+  uint64_t generate() {
+    uint64_t result = (state += 0x9E3779B97f4A7C15);
+    result = (result ^ (result >> 30)) * 0xBF58476D1CE4E5B9;
+    result = (result ^ (result >> 27)) * 0x94D049BB133111EB;
+    return result ^ (result >> 31);
+  }
+  uint64_t state;
+};
 
 struct XoShiRo128Jump {
   constexpr XoShiRo128Jump() : jump{} {
@@ -7,6 +18,7 @@ struct XoShiRo128Jump {
     for (int i = 0; i < 4; ++i)
       for (int b = 0; b < 32; ++b) jump[i][b] = static_cast<bool>(JUMP[i] & 1U << b);
   }
+  constexpr bool check(int i, int j) const { return jump[i][j]; }
   bool jump[4][32];
 };
 
@@ -23,7 +35,7 @@ void jump(uint32_t* __restrict out0, uint32_t* __restrict out1, uint32_t* __rest
   constexpr XoShiRo128Jump JumpTable;
   for (int i = 0; i < 4; ++i)
     for (int b = 0; b < 32; ++b) {
-      if (JumpTable.jump[i][b]) {
+      if (JumpTable.check(i, b)) {
         _s0 ^= s0;
         _s1 ^= s1;
         _s2 ^= s2;
@@ -43,18 +55,21 @@ void jump(uint32_t* __restrict out0, uint32_t* __restrict out1, uint32_t* __rest
   *out2 = _s2;
   *out3 = _s3;
 }
+}  // namespace
 
-XoShiRo128::XoShiRo128(uint32_t seed1, uint32_t seed2, uint32_t seed3, uint32_t seed4) noexcept(_XoShiRoNDebug) {
-  assert((seed1 > 0 || seed2 > 0 || seed3 > 0 || seed4 > 0));
+XoShiRo128::XoShiRo128(uint64_t seed) noexcept {
+  // SplitMix64
+  SplitMix64 SM64(seed);
+
   alignas(32) uint32_t S0[8];
   alignas(32) uint32_t S1[8];
   alignas(32) uint32_t S2[8];
   alignas(32) uint32_t S3[8];
 
-  S0[0] = seed1;
-  S1[0] = seed2;
-  S2[0] = seed3;
-  S3[0] = seed4;
+  S0[0] = SM64.generate();
+  S1[0] = SM64.generate();
+  S2[0] = SM64.generate();
+  S3[0] = SM64.generate();
 
   jump(S0 + 1, S1 + 1, S2 + 1, S3 + 1);
   jump(S0 + 2, S1 + 2, S2 + 2, S3 + 2);
@@ -78,8 +93,4 @@ void XoShiRo128::next() {
   s[0] = _mm256_xor_si256(s[0], s[3]);
   s[2] = _mm256_xor_si256(s[2], temp);
   s[3] = rotl(s[3], 11);
-}
-
-__m256i XoShiRo128::rotl(__m256i x, int32_t k) {
-  return _mm256_or_si256(_mm256_slli_epi32(x, k), _mm256_srli_epi32(x, 32 - k));
 }

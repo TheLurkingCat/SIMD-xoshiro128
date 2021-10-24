@@ -2,12 +2,6 @@
 #include <immintrin.h>
 #include <cstdint>
 
-#ifdef NDEBUG
-inline constexpr bool _XoShiRoNDebug = true;
-#else
-inline constexpr bool _XoShiRoNDebug = false;
-#endif
-
 // Use to select XoShiRo128+ or XoShiRo128+
 // XoShiRo128+ version is faster, but XoShiRo128++ is better
 // They have linear artifacts in the low bits
@@ -18,7 +12,7 @@ enum class GenType { PLUS, PLUSPLUS, STARSTAR };
 class XoShiRo128 {
  public:
   // Simple use 4 32bits seed, can use up to 128 bit initial state
-  XoShiRo128(uint32_t seed1, uint32_t seed2, uint32_t seed3, uint32_t seed4) noexcept(_XoShiRoNDebug);
+  explicit XoShiRo128(uint64_t seed) noexcept;
   // Selectable generation of 8 32bits int numbers
   template <GenType T>
   __m256i generate() {
@@ -44,6 +38,6 @@ class XoShiRo128 {
   // The xor shift function
   void next();
   // The rotate function
-  __m256i rotl(__m256i x, int32_t k);
+  __m256i rotl(__m256i x, int32_t k) { return _mm256_or_si256(_mm256_slli_epi32(x, k), _mm256_srli_epi32(x, 32 - k)); }
   __m256i s[4];
 };
