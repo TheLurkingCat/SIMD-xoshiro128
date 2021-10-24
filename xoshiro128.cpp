@@ -13,76 +13,76 @@ struct SplitMix64 {
 };
 
 struct XoShiRo128Jump {
-  constexpr XoShiRo128Jump() : jump{} {
+  constexpr XoShiRo128Jump() : table{} {
     constexpr uint32_t JUMP[4] = {0x8764000b, 0xf542d2d3, 0x6fa035c3, 0x77f2db5b};
     for (int i = 0; i < 4; ++i)
-      for (int b = 0; b < 32; ++b) jump[i][b] = static_cast<bool>(JUMP[i] & 1U << b);
+      for (int b = 0; b < 32; ++b) table[32 * i + b] = static_cast<bool>(JUMP[i] & 1U << b);
   }
-  constexpr bool check(int i, int j) const { return jump[i][j]; }
-  bool jump[4][32];
+  constexpr bool check(int i) const { return table[i]; }
+  bool table[128];
 };
 
-void jump(uint32_t* __restrict out0, uint32_t* __restrict out1, uint32_t* __restrict out2, uint32_t* __restrict out3) {
-  uint32_t s0 = *(out0 - 1);
-  uint32_t s1 = *(out1 - 1);
-  uint32_t s2 = *(out2 - 1);
-  uint32_t s3 = *(out3 - 1);
+void jump(uint32_t* __restrict s0, uint32_t* __restrict s1, uint32_t* __restrict s2, uint32_t* __restrict s3) {
+  alignas(32) uint32_t temp[8];
+  __m256i mask2 = _mm256_set_epi32(0, 0xFFFFFFFF, 0, 0, 0, 0xFFFFFFFF, 0, 0);
+  __m256i mask3 = _mm256_set_epi32(0, 0, 0xFFFFFFFF, 0, 0, 0, 0xFFFFFFFF, 0);
+  __m256i preState = _mm256_set_epi32(s0[0], s1[0], s2[0], s3[0], s0[1], s1[1], s2[1], s3[1]);
+  __m256i curState = _mm256_setzero_si256();
 
-  uint32_t _s0 = 0;
-  uint32_t _s1 = 0;
-  uint32_t _s2 = 0;
-  uint32_t _s3 = 0;
   constexpr XoShiRo128Jump JumpTable;
-  for (int i = 0; i < 4; ++i)
-    for (int b = 0; b < 32; ++b) {
-      if (JumpTable.check(i, b)) {
-        _s0 ^= s0;
-        _s1 ^= s1;
-        _s2 ^= s2;
-        _s3 ^= s3;
+  for (int iter = 0; iter < 3; ++iter) {
+    for (int b = 0; b < 128; ++b) {
+      if (JumpTable.check(b)) {
+        curState = _mm256_xor_si256(curState, preState);
       }
-      uint32_t temp = s1 << 9;
-      s2 ^= s0;
-      s3 ^= s1;
-      s1 ^= s2;
-      s0 ^= s3;
-      s2 ^= temp;
-      s3 = (s3 << 11) | (s3 >> 21);
-    }
+      __m256i shiftTemp_t1 = _mm256_slli_epi32(preState, 9);
+      __m256i shiftTemp = _mm256_and_si256(shiftTemp_t1, mask2);
+      __m256i shuffleTemp = _mm256_shuffle_epi32(preState, _MM_SHUFFLE(0, 1, 3, 2));
+      preState = _mm256_xor_si256(preState, shuffleTemp);
+      preState = _mm256_xor_si256(preState, shiftTemp);
 
-  *out0 = _s0;
-  *out1 = _s1;
-  *out2 = _s2;
-  *out3 = _s3;
+      __m256i shiftTemp2_t = _mm256_or_si256(_mm256_slli_epi32(preState, 11), _mm256_srli_epi32(preState, 21));
+      __m256i shiftTemp2 = _mm256_and_si256(_mm256_xor_si256(shiftTemp2_t, preState), mask3);
+      preState = _mm256_xor_si256(preState, shiftTemp2);
+    }
+    _mm256_store_si256(reinterpret_cast<__m256i*>(temp), curState);
+    preState = curState;
+    curState = _mm256_setzero_si256();
+    s0[iter * 2 + 2] = temp[0];
+    s1[iter * 2 + 2] = temp[1];
+    s2[iter * 2 + 2] = temp[2];
+    s3[iter * 2 + 2] = temp[3];
+    s0[iter * 2 + 3] = temp[4];
+    s1[iter * 2 + 3] = temp[5];
+    s2[iter * 2 + 3] = temp[6];
+    s3[iter * 2 + 3] = temp[7];
+  }
 }
 }  // namespace
 
 XoShiRo128::XoShiRo128(uint64_t seed) noexcept {
+  alignas(32) uint32_t s0[8];
+  alignas(32) uint32_t s1[8];
+  alignas(32) uint32_t s2[8];
+  alignas(32) uint32_t s3[8];
   // SplitMix64
   SplitMix64 SM64(seed);
+  uint64_t temp[4] = {SM64.generate(), SM64.generate(), SM64.generate(), SM64.generate()};
+  s0[0] = temp[0];
+  s0[1] = temp[2];
+  s1[0] = temp[0] >> 32;
+  s1[1] = temp[2] >> 32;
+  s2[0] = temp[1];
+  s2[1] = temp[3];
+  s3[0] = temp[1] >> 32;
+  s3[1] = temp[3] >> 32;
 
-  alignas(32) uint32_t S0[8];
-  alignas(32) uint32_t S1[8];
-  alignas(32) uint32_t S2[8];
-  alignas(32) uint32_t S3[8];
+  jump(s0, s1, s2, s3);
 
-  S0[0] = SM64.generate();
-  S1[0] = SM64.generate();
-  S2[0] = SM64.generate();
-  S3[0] = SM64.generate();
-
-  jump(S0 + 1, S1 + 1, S2 + 1, S3 + 1);
-  jump(S0 + 2, S1 + 2, S2 + 2, S3 + 2);
-  jump(S0 + 3, S1 + 3, S2 + 3, S3 + 3);
-  jump(S0 + 4, S1 + 4, S2 + 4, S3 + 4);
-  jump(S0 + 5, S1 + 5, S2 + 5, S3 + 5);
-  jump(S0 + 6, S1 + 6, S2 + 6, S3 + 6);
-  jump(S0 + 7, S1 + 7, S2 + 7, S3 + 7);
-
-  s[0] = _mm256_load_si256((const __m256i*)S0);
-  s[1] = _mm256_load_si256((const __m256i*)S1);
-  s[2] = _mm256_load_si256((const __m256i*)S2);
-  s[3] = _mm256_load_si256((const __m256i*)S3);
+  s[0] = _mm256_load_si256((const __m256i*)s0);
+  s[1] = _mm256_load_si256((const __m256i*)s1);
+  s[2] = _mm256_load_si256((const __m256i*)s2);
+  s[3] = _mm256_load_si256((const __m256i*)s3);
 }
 
 void XoShiRo128::next() {
