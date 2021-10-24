@@ -34,6 +34,15 @@ class XoShiRo128 {
     return result;
   }
 
+  template <GenType T>
+  __m256 generateFloat() {
+    __m256i result = generate<T>();
+    const __m256 baseFloat = _mm256_set1_ps(0x1.0p-24F);
+    result = _mm256_srli_epi32(result, 8);
+    const __m256 resultFloat = _mm256_cvtepi32_ps(result);
+    return _mm256_mul_ps(resultFloat, baseFloat);
+  }
+
  private:
   // The xor shift function
   void next();
