@@ -2,10 +2,10 @@
 #include <immintrin.h>
 #include <cstdint>
 
-// Use to select XoShiRo128+ or XoShiRo128+
-// XoShiRo128+ version is faster, but XoShiRo128++ is better
-// They have linear artifacts in the low bits
-// Maybe use slower XoShiRo128** will be better.
+// Use to select XoShiRo128+ / XoShiRo128++ / XoShiRo128**
+// XoShiRo128+ version is faster, but XoShiRo128** is better
+// + version have linear artifacts in the low bits
+// Use slower XoShiRo128** will be better.
 enum class GenType { PLUS, PLUSPLUS, STARSTAR };
 // My implement of XOR - Shift - Rotate with 128bit state using SIMD
 // https://en.wikipedia.org/wiki/Xorshift
